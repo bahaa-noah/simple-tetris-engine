@@ -110,11 +110,12 @@ class TetrisEngine
      *
      * @return void
      */
-    private function createGrid(): void
+    public function createGrid(): void
     {
+
         $result  = "";
         // loop through file lines -> Q0,Q1
-        foreach ($this->fileContent as  $line) {
+        foreach ($this->getFileContent() as  $key => $line) {
 
             // loop through line shapes -> Q0
             foreach ($line as $shape) {
@@ -128,6 +129,10 @@ class TetrisEngine
             }
 
             $result .= sprintf("%s => %s" . PHP_EOL, implode(',', $line), $this->getGridHeight());
+
+            if ($key ==   array_key_last($this->getFileContent())) {
+                break;
+            }
             $this->resetGrid();
         }
 
@@ -280,7 +285,7 @@ class TetrisEngine
      *
      * @return array
      */
-    private function getGrid(): array
+    public function getGrid(): array
     {
         return $this->grid;
     }
@@ -290,7 +295,7 @@ class TetrisEngine
      *
      * @return integer
      */
-    private function getGridHeight(): int
+    public function getGridHeight(): int
     {
         return sizeof($this->getGrid());
     }
@@ -321,9 +326,31 @@ class TetrisEngine
      */
     private function saveOutputToFile(string $result): void
     {
+        if (empty($this->output)) {
+            return;
+        }
         $output = fopen($this->output, "w") or die("Unable to open file!");
         fwrite($output, $result . "\n");
         fclose($output);
+    }
+
+    /**
+     *
+     * @param array $fileContentArray
+     * @return self
+     */
+    public function setFileContent(array $fileContentArray): self
+    {
+        $this->fileContent = $fileContentArray;
+        return $this;
+    }
+
+    /**
+     * @return array
+     */
+    public function getFileContent(): array
+    {
+        return $this->fileContent;
     }
 
     /**
