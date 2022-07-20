@@ -1,16 +1,67 @@
 <?php
 
-
+/**
+ * Simple Tetris Engine
+ */
 class TetrisEngine
 {
 
+    /**
+     * @var array
+     */
+    private array $fileContent;
 
-    public array $data;
+    /**
+     * the playground grid
+     *
+     * @var array
+     */
+    private array $grid = [];
 
-    private $maxRows = 10;
-    private $maxHeight = 100;
+    /**
+     * maximum allow columns in the playground grid
+     */
+    const  MAX_COLS = 10;
 
-    private $shapes = [
+    /**
+     * maximum allowed rows in the playground grid
+     */
+    const  MAX_HEIGHT = 100;
+
+    /**
+     * output string
+     *
+     * @var string
+     */
+    private string $output = '';
+
+
+    /**
+     * The Tetromino shapes represented by 2 dimensions array
+     * 
+     * eg : Q
+     * [
+     *  [Q,Q],
+     *  [Q,Q]
+     * ]
+     * 
+     * eg : L
+     * [ 
+     *  [L,0],
+     *  [L,0]
+     *  [L,L] 
+     * ]
+     * 
+     * eg : T 
+     *  [
+     *   [T,T,T],
+     *   [0,T,0]
+     * ]
+     * ..etc
+     * 
+     * each cell of the array that filled with the shape name is represented by it's index in the shapes array
+     */
+    const SHAPES = [
         'Q' => [
             [0, 0], [0, 1], [1, 0], [1, 1],
         ],
@@ -34,94 +85,80 @@ class TetrisEngine
         ]
     ];
 
-    private $grid = [];
 
 
-    public function addRow()
+    /**
+     * add new row to the playground grid
+     *
+     * @return void
+     */
+    private function addRow(): void
     {
-        if (sizeOf($this->grid) > $this->maxHeight) {
+        if ($this->getGridHeight() > self::MAX_HEIGHT) {
             throw new Exception("You have reached the maximum height, Game Over!");
         }
 
         $row = [];
-        for ($j = 0; $j < $this->maxRows; $j++) {
+        for ($j = 0; $j < self::MAX_COLS; $j++) {
             $row[$j] = 0;
         }
         array_push($this->grid, $row);
     }
 
-    public function formateFileInput()
+    /**
+     * Create the playground grid
+     *
+     * @return void
+     */
+    private function createGrid(): void
     {
-        $inputFile = fopen("input2.txt", "r");
-
-        while (($line = fgetcsv($inputFile)) !== FALSE) {
-            $this->data[] = $line;
-        }
-
-        fclose($inputFile);
-    }
-
-
-
-    public function createGrid()
-    {
-        $data =  $this->data;
-
-        $this->gridHeight = 0;
-        $this->gridWidth = 0;
         $result  = "";
-        foreach ($data as $key => $value) {
-            foreach ($value as $$key => $shape) {
+        // loop through file lines -> Q0,Q1
+        foreach ($this->fileContent as  $line) {
+
+            // loop through line shapes -> Q0
+            foreach ($line as $shape) {
+
                 $shapeArray = str_split($shape);
                 $shapeName  = $shapeArray[0];
                 $shapeStartIndex  = $shapeArray[1];
-                $this->fillTheGrid($this->shapes[$shapeName], $shapeStartIndex);
-                foreach ($this->grid as $key => $row) {
-                    if ($this->isCompletedRow($row)) {
-                        $this->removeRowByIndex($key);
-                    }
-                }
+
+                $this->dropShapeIntoTheGrid(self::SHAPES[$shapeName], $shapeStartIndex);
+                $this->shouldRemoveRow();
             }
 
-            $result .= $this->getGridHeight() . ",";
+            $result .= sprintf("%s => %s" . PHP_EOL, implode(',', $line), $this->getGridHeight());
             $this->resetGrid();
         }
 
-        print ($result) . PHP_EOL;
-        $this->saveOutput($result);
+        print($result);
+        $this->saveOutputToFile($result);
     }
 
 
-    public function saveOutput($result)
-    {
-        $output = fopen("output.txt", "w") or die("Unable to open file!");
-        fwrite($output, $result . "\n");
-        fclose($output);
-    }
-
-
-    public function resetGrid()
-    {
-        unset($this->grid);
-        $this->grid = [];
-    }
-
-
-    public function fillTheGrid(array $shape, int $startIndex)
+    /**
+     * Drop Tetromino shape into the right place in the playground grid
+     *
+     * @param array $shape
+     * @param integer $startIndex
+     * @return void
+     */
+    private function dropShapeIntoTheGrid(array $shape, int $startIndex): void
     {
 
 
         if (empty($this->grid)) {
             $this->addRow();
         }
-
+        //adjust the shape indexes based on the start column 
         $formattedShape = [];
         for ($i = 0; $i < sizeof($shape); $i++) {
             $formattedShape[$i][0] =  $shape[$i][0];
             $formattedShape[$i][1] =  $shape[$i][1] + $startIndex;
         }
 
-        foreach ($this->grid as $key => $row) {
+        // check for collision and adjust the shape values in case there is any
+        foreach ($this->getGrid() as $key => $row) {
             if ($row[$startIndex] == 1) {
                 for ($i = 0; $i < sizeof($shape); $i++) {
                     $formattedShape[$i][0] =  $shape[$i][0] + $key;
@@ -149,101 +186,154 @@ class TetrisEngine
             }
         }
 
+        if ($gridCol >= self::MAX_COLS) {
+            throw new Exception("Illegal shape start Index, Please enter valid start and try again!");
+            die;
+        }
 
-        for ($i = 0; $i < sizeof($formattedShape); $i++) {
-            if (!isset($this->grid[$formattedShape[$i][0]][$formattedShape[$i][1]])) {
+        $this->shouldAddNewRows($formattedShape);
+        $this->insertShape($formattedShape);
+    }
+
+
+    /**
+     * Check if the playground grid needs new rows before inserting new shape
+     *
+     * @param array $shape
+     * @return void
+     */
+    public function shouldAddNewRows(array $shape): void
+    {
+        for ($i = 0; $i < sizeof($shape); $i++) {
+            if (!isset($this->grid[$shape[$i][0]][$shape[$i][1]])) {
                 $this->addRow();
             }
         }
+    }
 
-        for ($k = 0; $k < count($formattedShape); $k++) {
-            $this->grid[$formattedShape[$k][0]][$formattedShape[$k][1]] = 1;
+    /**
+     * Insert new shape into the playground grid
+     *
+     * @param array $shape
+     * @return void
+     */
+    public function insertShape(array $shape): void
+    {
+        for ($k = 0; $k < sizeof($shape); $k++) {
+            $this->grid[$shape[$k][0]][$shape[$k][1]] = 1;
         }
     }
 
-    // public function fillTheGrid(array $shape, int $startIndex)
-    // {
+    /**
+     * Undocumented function
+     *
+     * @return void
+     */
+    private function shouldRemoveRow(): void
+    {
+        foreach ($this->getGrid() as $key => $row) {
+            if ($this->isCompletedRow($row)) {
+                $this->removeRowByIndex($key);
+            }
+        }
+    }
 
+    /**
+     * Reinitialize the playground grid
+     *
+     * @return void
+     */
+    private function resetGrid(): void
+    {
+        unset($this->grid);
+        $this->grid = [];
+    }
 
-    //     if (empty($this->grid)) {
-    //         $this->addRow();
-    //     }
-
-    //     $i = 0;
-    //     $gridRow = 0;
-    //     while ($i < sizeof($shape)) {
-
-    //         $shapeRow = $shape[$i][0];
-    //         $shapeCol = $shape[$i][1] + $startIndex;
-    //         $gridRow = $shapeRow;
-    //         $gridCol = $shapeCol;
-
-    //         if ($gridCol >= $this->maxRows) {
-    //             throw new Exception("Illegal shape start Index, Please enter valid start and try again!");
-    //             die;
-    //         }
-
-    //         while (!isset($this->grid[$gridRow][$gridCol])) {
-    //             $this->addRow();
-    //         }
-
-    //         $isAvailable = $this->grid[$gridRow][$gridCol] == 0;
-
-    //         if ($isAvailable) {
-    //             $this->grid[$gridRow][$gridCol] = 1;
-    //         } else {
-
-    //             if (!isset($this->grid[$gridRow][$gridCol])) {
-    //                 $this->addRow();
-    //             }
-
-    //             while ($this->grid[$gridRow][$gridCol] == 1) {
-
-    //                 $gridRow++;
-
-    //                 if (!isset($this->grid[$gridRow][$gridCol])) {
-    //                     $this->addRow();
-    //                 }
-
-    //                 if ($this->grid[$gridRow][$gridCol] == 0) {
-    //                     $this->grid[$gridRow][$gridCol] = 1;
-    //                     break;
-    //                 }
-    //             }
-    //         }
-    //         $i++;
-    //     }
-
-    //     if ($this->isCompletedRow($this->grid[0])) {
-    //         $this->removeRowByIndex(0);
-    //     }
-    // }
-
-    public function isCompletedRow($row)
+    /**
+     * Check if a row is completed
+     * Completed row is a row that doesn't contain any zeros and all of it's values are ones
+     *
+     * @param array $row
+     * @return boolean
+     */
+    private function isCompletedRow(array $row): bool
     {
         return in_array(0, $row) ? false : true;
     }
 
-    public function removeRowByIndex($index)
+
+    /**
+     * Remove row from the playground grid by the row index
+     *
+     * @param integer $index
+     * @return void
+     */
+    private function removeRowByIndex(int $index): void
     {
         unset($this->grid[$index]);
-        $this->grid = array_values($this->grid);
+        $this->grid = array_values($this->getGrid());
     }
 
-    public function getGrid()
+
+    /**
+     * return the playground grid
+     *
+     * @return array
+     */
+    private function getGrid(): array
     {
         return $this->grid;
     }
 
-    public function getGridHeight()
+    /**
+     * Return current grid height
+     *
+     * @return integer
+     */
+    private function getGridHeight(): int
     {
         return sizeof($this->getGrid());
     }
+
+    /**
+     * Get input/output file names/paths from STDIN
+     *
+     * @return void
+     */
+    private function getInputAndOutputFiles(): void
+    {
+        $input = (string)readline("please enter the input file name/path: ");
+        $this->output = (string)readline("please enter the output file name/path: ");
+        $inputFile = fopen($input, "r") or die("Unable to open file!");
+
+        while (($line = fgetcsv($inputFile)) !== FALSE) {
+            $this->fileContent[] = $line;
+        }
+
+        fclose($inputFile);
+    }
+
+    /**
+     * Save the result to output file
+     *
+     * @param string $result
+     * @return void
+     */
+    private function saveOutputToFile(string $result): void
+    {
+        $output = fopen($this->output, "w") or die("Unable to open file!");
+        fwrite($output, $result . "\n");
+        fclose($output);
+    }
+
+    /**
+     * Run the game
+     *
+     * @return void
+     */
+    public function run(): void
+    {
+        $this->getInputAndOutputFiles();
+        $this->createGrid();
+    }
 }
-
-
-$tetrisEngine =  new TetrisEngine;
-$tetrisEngine->formateFileInput();
-$tetrisEngine->createGrid();
-$result = $tetrisEngine->getGrid();
-// print_r($result);
